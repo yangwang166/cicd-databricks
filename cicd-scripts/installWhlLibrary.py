@@ -56,10 +56,12 @@ def main():
             name, file_extension = os.path.splitext(name)
             if file_extension.lower() in ['.whl']:
                 libslist.append(name + file_extension.lower())
+    print(libslist)
 
     for lib in libslist:
         dbfslib = dbfspath + '/' + lib
-        print(dbfslib + ' before:' + getLibStatus(shard, token, clusterid, dbfslib))
+        print(dbfslib)
+        print(str(dbfslib) + ' before:' + str(getLibStatus(shard, token, clusterid, dbfslib)))
 
         if (getLibStatus(shard, token, clusterid, dbfslib) != 'not found'):
             print(dbfslib + " exists. Uninstalling.")
@@ -69,7 +71,7 @@ def main():
             resp = requests.post(shard + '/api/2.0/libraries/uninstall', data=json.dumps(values), auth=("token", token))
             runjson = resp.text
             d = json.loads(runjson)
-            print(dbfslib + ' after:' + getLibStatus(shard, token, clusterid, dbfslib))
+            print(str(dbfslib) + ' after:' + str(getLibStatus(shard, token, clusterid, dbfslib)))
 
             # Restart if libraries uninstalled
             if i > 0:
