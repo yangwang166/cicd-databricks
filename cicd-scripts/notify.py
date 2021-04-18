@@ -52,6 +52,7 @@ def send_output_slacks(slackurl, message, outputpath, channel):
     attachments = []
 
     for filename in glob.glob(os.path.join(outputpath, '*.json')):
+        print(filename)
         data = json.load(open(filename))
         runid  = data['run_id']
         status = data['state']['result_state']
