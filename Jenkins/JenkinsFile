@@ -16,7 +16,7 @@ node {
     def CLUSTERID       = "1215-231833-rush498"
     def CONDAPATH       = "/root/anaconda3"
     def CONDAENV        = "tempenv"
-    def SLACKURL        = "https://hooks.slack.com/services/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"
+    def SLACKURL        = "https://hooks.slack.com/services/---/---/---"
     def SLACKCHANNEL    = "#cicd"
 
     stage('Setup') {
