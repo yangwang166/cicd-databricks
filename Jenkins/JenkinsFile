@@ -1,58 +1,81 @@
 node {
     def GITREPO         = "/var/lib/jenkins/workspace/${env.JOB_NAME}"
-    def GITREPOREMOTE   = "https://github.com/databricks/cicd-pipline.git"
-    def GITHUBCREDID    = "gitsynch"
-    def CURRENTRELEASE  = "release"
-    def DBTOKEN         = "DemoToken"
-    def DBURL           = "https://<shardname>.cloud.databricks.com"
+    def GITREPOREMOTE   = "https://github.com/yangwang166/cicd-databricks.git"
+    def GITHUBCREDID    = "gittoken"
+    def CURRENTRELEASE  = "master"
+    def DBTOKEN         = "demotoken"
+    def DBURL           = "https://adb-8405830731420074.14.azuredatabricks.net"
     def SCRIPTPATH      = "${GITREPO}/cicd-scripts"
     def NOTEBOOKPATH    = "${GITREPO}/notebooks"
     def LIBRARYPATH     = "${GITREPO}/libraries"
     def BUILDPATH       = "${GITREPO}/Builds/${env.JOB_NAME}-${env.BUILD_NUMBER}"
     def OUTFILEPATH     = "${BUILDPATH}/logs/Output"
     def TESTRESULTPATH  = "${BUILDPATH}/logs/reports/junit"
-    def WORKSPACEPATH   = "<Workspace Dir path e.g. /Shared/ETL>"
-    def DBFSPATH        = "dbfs:/Libs/python/"
-    def CLUSTERID       = "1234-5678-demo123"
-    def CONDAPATH       = "/opt/miniconda3"
-    def CONDAENV        = "cicddemo"
-    def SLACKURL        = "https://hooks.slack.com/services/ABC123/DEF456/DEMO1122"
-    def SLACKCHANNEL    = "#demo-notifications"
+    def WORKSPACEPATH   = "/Shared/CICDETL"
+    def DBFSPATH        = "dbfs:/Libs/python"
+    def CLUSTERID       = "1215-231833-rush498"
+    def CONDAPATH       = "/root/anaconda3"
+    def CONDAENV        = "tempenv"
+    def SLACKURL        = "https://hooks.slack.com/services/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"
+    def SLACKCHANNEL    = "#cicd"
 
     stage('Setup') {
+        //cleanWs()
+        echo "======================Setup=============================="
         withCredentials([string(credentialsId: DBTOKEN, variable: 'TOKEN')]) {
 
             sh """#!/bin/bash
                   
-                  # Configure Conda Environment for deployment & testing
-                  source ${CONDAPATH}/bin/activate ${CONDAENV}
+                  rm -rf ./*
+                  
+                  wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -nv -O miniconda.sh
+                  bash miniconda.sh -b -p $WORKSPACE/miniconda
+
+                  source $WORKSPACE/miniconda/etc/profile.d/conda.sh
+                  
+                  conda config --set always_yes yes --set changeps1 no
+                  conda update -q conda
+
+                  conda create --name ${CONDAENV}  python=3.8
+                  
+                  conda activate ${CONDAENV} 
+                  
+                  pip install requests databricks-connect databricks-cli pytest
                   
                   # Configure Databricks CLI for deployment
-                  echo "${DBURL}
-                  $TOKEN" | databricks configure --token
+                  #echo "${DBURL}
+                  #$TOKEN" | databricks configure --token
+                  
+                  #databricks -v
                   
                   # Configure Databricks Connect for testing
-                  echo "${DBURL}
-                  $TOKEN
-                  ${CLUSTERID}
-                  0
-                  15001" | databricks-connect configure
+                  #echo "${DBURL}
+                  #$TOKEN
+                  #${CLUSTERID}
+                  #8405830731420074
+                  #15001" | databricks-connect configure
+                  
+                  #databricks-connect -h
                """
         }
     }
     stage('Checkout') { // for display purposes
+        echo "======================Checkout=============================="
         echo "Pulling ${CURRENTRELEASE} Branch from Github"
         git branch: CURRENTRELEASE, credentialsId: GITHUBCREDID, url: GITREPOREMOTE
     }
     stage('Run Unit Tests') {
+        echo "======================Run Unit Tests=============================="
         try {
             sh """#!/bin/bash
             
-                  # Enable Conda Environment for tests
-                  source ${CONDAPATH}/bin/activate ${CONDAENV}
+                  source $WORKSPACE/miniconda/etc/profile.d/conda.sh
+                  conda activate ${CONDAENV} 
                   
                   # Python Tests for Libs
-                  python3 -m pytest --junit-xml=${TESTRESULTPATH}/TEST-libout.xml ${LIBRARYPATH}/python/dbxdemo/test*.py || true
+                  python -m pytest --junit-xml=${TESTRESULTPATH}/TEST-libout.xml ${LIBRARYPATH}/python/dbxdemo/test*.py || true
+                  
+                  echo "Run Unit Tests Finished"
                """           
         } catch(err) {
           step([$class: 'JUnitResultArchiver', testResults: '--junit-xml=${TESTRESULTPATH}/TEST-*.xml'])
@@ -62,17 +85,20 @@ node {
         }
     }
     stage('Package') {
+        echo "======================Package=============================="
         sh """#!/bin/bash
         
-              # Enable Conda Environment for tests
-              source ${CONDAPATH}/bin/activate ${CONDAENV}
+              source $WORKSPACE/miniconda/etc/profile.d/conda.sh
+              
+              conda activate ${CONDAENV}
               
               # Package Python Library to Wheel
               cd ${LIBRARYPATH}/python/dbxdemo
-              python3 setup.py sdist bdist_wheel
+              python setup.py sdist bdist_wheel
            """            
     }    
     stage('Build Artifact') {
+        echo "======================Build Artifact=============================="
         sh """mkdir -p ${BUILDPATH}/Workspace
               mkdir -p ${BUILDPATH}/Libraries/python
               mkdir -p ${BUILDPATH}/Validation/Output
@@ -88,23 +114,27 @@ node {
         archiveArtifacts artifacts: 'Builds/latest_build.tar.gz'
     }
     stage('Deploy') {
+        echo "======================Deploy=============================="
         sh """#!/bin/bash
-              # Enable Conda Environment for tests
-              source ${CONDAPATH}/bin/activate ${CONDAENV}
+              source $WORKSPACE/miniconda/etc/profile.d/conda.sh
+              conda activate ${CONDAENV} 
               
               # Use Databricks CLI to deploy Notebooks
-              databricks workspace import_dir ${BUILDPATH}/Workspace ${WORKSPACEPATH}
+              databricks workspace import_dir ${NOTEBOOKPATH} ${WORKSPACEPATH}
               
               dbfs cp -r ${BUILDPATH}/Libraries/python ${DBFSPATH}
            """  
         withCredentials([string(credentialsId: DBTOKEN, variable: 'TOKEN')]) {
            sh """#!/bin/bash
+                
+                source $WORKSPACE/miniconda/etc/profile.d/conda.sh
+                conda activate ${CONDAENV} 
+                
+                #Get space delimited list of libraries
+                LIBS=${BUILDPATH}/Libraries/python
                      
-                 #Get space delimited list of libraries
-                 LIBS=\$(find ${BUILDPATH}/Libraries/python/ -name '*.whl' | sed 's#.*/##' | paste -sd " ")
-                     
-                 #Script to uninstall, reboot if needed & instsall library
-                 python3 ${SCRIPTPATH}/installWhlLibrary.py --shard=${DBURL}\
+                #Script to uninstall, reboot if needed & instsall library
+                python ${SCRIPTPATH}/installWhlLibrary.py --shard=${DBURL}\
                     --token=$TOKEN\
                     --clusterid=${CLUSTERID}\
                     --libs=\$LIBS\
@@ -113,31 +143,46 @@ node {
         }
     }
     stage('Run Integration Tests') {
+        echo "======================Run Integration Tests=============================="
         withCredentials([string(credentialsId: DBTOKEN, variable: 'TOKEN')]) {
-            sh """python3 ${SCRIPTPATH}/executenotebook.py --shard=${DBURL}\
+            sh """
+                source $WORKSPACE/miniconda/etc/profile.d/conda.sh
+                
+                conda activate ${CONDAENV} 
+                
+                mkdir -p ${OUTFILEPATH}
+                
+                python ${SCRIPTPATH}/executenotebook.py --shard=${DBURL}\
                             --token=$TOKEN\
                             --clusterid=${CLUSTERID}\
-                            --localpath=${NOTEBOOKPATH}/VALIDATION\
-                            --workspacepath=${WORKSPACEPATH}/VALIDATION\
+                            --localpath=${NOTEBOOKPATH}\
+                            --workspacepath=${WORKSPACEPATH}\
                             --outfilepath=${OUTFILEPATH}
                """
         }
         sh """sed -i -e 's #ENV# ${OUTFILEPATH} g' ${SCRIPTPATH}/evaluatenotebookruns.py
-              python3 -m pytest --junit-xml=${TESTRESULTPATH}/TEST-notebookout.xml ${SCRIPTPATH}/evaluatenotebookruns.py || true
+              
+              source $WORKSPACE/miniconda/etc/profile.d/conda.sh
+              conda activate ${CONDAENV} 
+              
+              python -m pytest --junit-xml=${TESTRESULTPATH}/TEST-notebookout.xml ${SCRIPTPATH}/evaluatenotebookruns.py || true
            """
     }
     stage('Report Test Results') {
-        sh """find ${OUTFILEPATH} -name '*.json' -exec gzip --verbose {} \\;
-              touch ${TESTRESULTPATH}/TEST-*.xml
-           """      
+        echo "======================Report Test Result=============================="
         junit "**/reports/junit/*.xml"
         
     }
     stage('Send Notifications') {
-        sh """python3 ${SCRIPTPATH}/notify.py "--slackurl=${SLACKURL}\
+        echo "======================Send Notifications=============================="
+        sh """
+            source $WORKSPACE/miniconda/etc/profile.d/conda.sh
+            conda activate ${CONDAENV} 
+            
+            python ${SCRIPTPATH}/notify.py --slackurl=${SLACKURL}\
                             --message='${env.JOB_NAME}:Build-${env.BUILD_NUMBER}'\
                             --channel=${SLACKCHANNEL}\
                             --outputpath=${OUTFILEPATH}
            """
-    }    
+    }
 }
